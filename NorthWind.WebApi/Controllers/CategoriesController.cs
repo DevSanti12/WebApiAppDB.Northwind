@@ -17,89 +17,150 @@ namespace NorthWind.WebApi.Controllers
             _context.Database.EnsureCreated();
         }
 
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<Categories>>> GetCategories()
+        {
+            try
+            {
+                return await _context.Categories.ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "Error retrieving categories from database");
+            }
+        }
+
         [HttpGet("{id}")]
         public async Task<ActionResult> GetCategory(int id)
         {
-            if (id < 0)
+            try
             {
-                return BadRequest("Category id cannot be negative.");
-            }
+                if (id < 0)
+                {
+                    return BadRequest("Category id cannot be negative.");
+                }
 
-            var category = await _context.Categories.FindAsync(id);
-            if (category == null)
-            {
-                return NotFound();
+                var category = await _context.Categories.FindAsync(id);
+                if (category == null)
+                {
+                    return NotFound();
+                }
+                return Ok(category);
             }
-            return Ok(category);
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "Error retrieving category from database");
+            }
         }
 
         [HttpPost]
         public async Task<ActionResult<Categories>> PostCategory(Categories category)
         {
-            if (category == null)
+            try
             {
-                return BadRequest("Category cannot be null.");
+                if (category == null)
+                {
+                    return BadRequest("Category cannot be null.");
+                }
+
+                _context.Categories.Add(category);
+                await _context.SaveChangesAsync();
+
+                return CreatedAtAction(
+                    "GetCategory",
+                    new { id = category.CategoryID },
+                    category);
             }
-
-            _context.Categories.Add(category);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(
-                "GetCategory",
-                new { id = category.CategoryID },
-                category);
+            catch (DbUpdateException)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "Error creating category in database");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "Error processing category creation");
+            }
         }
 
         [HttpPut("{id}")]
         public async Task<ActionResult<Categories>> PutCategory(int id, Categories Category)
         {
-            if (id != Category.CategoryID)
-                return BadRequest();
-
-            var existingCategory = await _context.Categories.FindAsync(id);
-
-            if (existingCategory == null)
-                return NotFound();
-
-            // Update only the properties that are specified in the request
-            _context.Entry(existingCategory).CurrentValues.SetValues(Category);
-
-            // Ensure that only modified properties are updated
-            foreach (var property in _context.Entry(Category).Properties)
-            {
-                if (property.CurrentValue == null)
-                {
-                    _context.Entry(existingCategory).Property(property.Metadata.Name).IsModified = false;
-                }
-            }
-
             try
             {
-                await _context.SaveChangesAsync();
+                if (id != Category.CategoryID)
+                    return BadRequest();
+
+                var existingCategory = await _context.Categories.FindAsync(id);
+
+                if (existingCategory == null)
+                    return NotFound();
+
+                // Update only the properties that are specified in the request
+                _context.Entry(existingCategory).CurrentValues.SetValues(Category);
+
+                // Ensure that only modified properties are updated
+                foreach (var property in _context.Entry(Category).Properties)
+                {
+                    if (property.CurrentValue == null)
+                    {
+                        _context.Entry(existingCategory).Property(property.Metadata.Name).IsModified = false;
+                    }
+                }
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!_context.Categories.Any(p => p.CategoryID == id))
+                        return NotFound();
+                    throw;
+                }
+
+                return Ok(existingCategory);
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!_context.Categories.Any(p => p.CategoryID == id))
-                    return NotFound();
-                else
-                    throw;
+                return StatusCode(StatusCodes.Status409Conflict,
+                    "Category was modified by another user");
             }
-
-            return Ok(existingCategory);
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "Error updating category");
+            }
         }
 
         [HttpDelete("{id}")]
         public async Task<ActionResult<Categories>> DeleteCategory(int id)
         {
-            var Category = await _context.Categories.FindAsync(id);
-            if (Category == null)
+            try
             {
-                return NotFound();
-            }
-            _context.Categories.Remove(Category);
-            await _context.SaveChangesAsync();
+                var Category = await _context.Categories.FindAsync(id);
+                if (Category == null)
+                {
+                    return NotFound();
+                }
 
-            return Category;
+                _context.Categories.Remove(Category);
+                await _context.SaveChangesAsync();
+
+                return Category;
+            }
+            catch (DbUpdateException)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "Error deleting category. It might be referenced by other records.");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "Error processing category deletion");
+            }
         }
     }
 }
